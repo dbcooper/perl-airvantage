@@ -1,0 +1,9 @@
+# If there is a (valid) '#' character in any fields, you need to escape it (\#), even if it's inside quotes
+<oauth2>
+    host            = na.airvantage.net
+    client_id       = YOUR_CLIENT_ID
+    client_secret   = YOUR_CLIENT_SECRET
+    username        = username@example.com
+    password        = YOUR_PASSWORD
+    token_filename  = token.json
+</oauth2>

@@ -1,0 +1,100 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+use LWP::Authen::OAuth2;
+use JSON::Any;
+use Config::General;
+use Data::Dumper;
+
+
+my $CONFIG_FILE = 'airvantage.conf';
+
+my $cg_obj = Config::General->new($CONFIG_FILE);
+my $config = { $cg_obj->getall() }->{oauth2};
+unless ( $config->{client_secret} and $config->{client_id} ) {
+    die "?no client_id or client_secret in configuration?";
+} 
+
+my $host = $config->{host};
+my $token_fn = $config->{token_filename};
+
+warn Dumper($config);
+
+# OAuth2 constructor arguments
+my %args = (
+    authorization_endpoint  => "https://$host/api/oauth/token",
+    token_endpoint          => "https://$host/api/oauth/token",
+
+    request_required_params => [qw( grant_type username password client_id client_secret )],
+    # ?not sure why this isn't set by default...  is_strict perhaps?
+    request_default_params  => { grant_type => 'password' },
+
+    refresh_default_params  => { grant_type => 'refresh_token' },
+
+    save_tokens             => \&save_tokens,
+    save_tokens_args        => [ $token_fn ],
+
+    client_id               => $config->{client_id},
+    client_secret           => $config->{client_secret},
+);
+
+# If we have previous token information, we /have/ to specify it when
+# constructing the OAuth2 object.  Hence two separate creation
+# approaches
+my $oauth2;
+if ( my $ts = load_tokens($token_fn) ) {
+warn "?load token from file\n$ts\n"; # XXX REMOVE
+    $args{token_string} = $ts; 
+    $oauth2 = LWP::Authen::OAuth2->new( %args );
+}
+else {
+warn "?initial request of token\n"; # XXX REMOVE
+    # We /have/ to do an initial request
+    $oauth2 = LWP::Authen::OAuth2->new( %args );
+    my $r = $oauth2->request_tokens(
+        username    => $config->{username},
+        password    => $config->{password},
+    );
+}
+
+# Refresh if necessary (should only be relevant when loading from file)
+if ($oauth2->can_refresh_tokens() && $oauth2->should_refresh()) {
+    $oauth2->refresh_access_tokens();
+}
+
+
+my $api_url = "https://$host/api/v1";
+
+# Simple test to verify setup worked
+my $r = $oauth2->get("$api_url/users/current");
+if ($r->is_success) {
+warn "whoami?\n"; # XXX REMOVE
+    print $r->decoded_content, "\n";
+}
+else {
+    warn $r->status_line, "\n";
+}
+
+
+# Save object's token_string to the specified filename
+sub save_tokens
+{
+    my ($token_string, $fn) = @_;
+    open my $fh, '>', $fn or die "?unable to open $fn for writing: $!";
+    print $fh "$token_string\n";
+    close $fh;
+}
+
+sub load_tokens
+{
+    my ($fn) = @_;
+    return unless (-e $fn);
+    open my $fh, '<', $fn or die "?unable to open $fn for reading: $!";
+    my $token_string = <$fh>;
+    close $fh;
+    chomp($token_string);
+    return $token_string;
+}
+
