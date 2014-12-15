@@ -61,7 +61,7 @@ warn "?initial request of token\n"; # XXX REMOVE
 
 # Refresh if necessary (should only be relevant when loading from file)
 if ($oauth2->can_refresh_tokens() && $oauth2->should_refresh()) {
-    $oauth2->refresh_access_tokens();
+    $oauth2->refresh_access_token();
 }
 
 
